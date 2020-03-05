@@ -174,11 +174,14 @@ public class JaxbValidationsPlugins extends Plugin {
 		boolean nillable = toBoolean(Utils.getField("nillable",particle.getTerm())); 
 		JFieldVar field = classOutline.implClass.fields().get(propertyName(property));
 
+		boolean isNotNull = false;  //to tell validAnnotation() if the element is required
+
 		// workaround for choices
 		boolean required = property.isRequired();
 		if (minOccurs < 0 || minOccurs >= 1 && required && !nillable) {
 			if (!hasAnnotation(field, NotNull.class)) {
 				processNotNull(classOutline, field);
+				isNotNull = true;  //element is required
 			}
 		}
 		if (maxOccurs > 1) {
@@ -199,10 +202,12 @@ public class JaxbValidationsPlugins extends Plugin {
 
 		XSTerm term = particle.getTerm();
 		if (term instanceof ElementDecl) {
-			processElement(property, classOutline, field, (ElementDecl) term);
+			processElement(property, classOutline, field, isNotNull, (ElementDecl) term);
+			//additional isNotNull argument
 		} else if (term instanceof DelayedRef.Element) {
 			XSElementDecl xsElementDecl = ((DelayedRef.Element) term).get();
-			processElement(property, classOutline, field, (ElementDecl) xsElementDecl);
+			processElement(property, classOutline, field, isNotNull, (ElementDecl) xsElementDecl);
+			//additional isNotNull argument
 		}
 
 	}
@@ -214,12 +219,12 @@ public class JaxbValidationsPlugins extends Plugin {
 		return false;
 	}
 
-	private void processElement(CElementPropertyInfo property, ClassOutline clase, JFieldVar var, ElementDecl element) {
+	private void processElement(CElementPropertyInfo property, ClassOutline clase, JFieldVar var, boolean isNotNull, ElementDecl element) {
 		String propertyName = propertyName(property);
 		String className = clase.implClass.name();
 		XSType elementType = element.getType();
 
-		validAnnotation(elementType, var, propertyName, className);
+		validAnnotation(elementType, var, propertyName, className, isNotNull);
 
 		if (elementType instanceof XSSimpleType) {
 			processType((XSSimpleType) elementType, var, propertyName, className);
@@ -245,12 +250,19 @@ public class JaxbValidationsPlugins extends Plugin {
 	}
 
 	private void validAnnotation(final XSType elementType, JFieldVar var, final String propertyName,
-								 final String className) {
+								 final String className, boolean isNotNull) {
 		if ((targetNamespace == null || elementType.getTargetNamespace().startsWith(targetNamespace)) &&
                 (elementType.isComplexType() || Utils.isCustomType(var))) {
 			if (!hasAnnotation(var, Valid.class)) {
+/*
 				log("@Valid: " + propertyName + " added to class " + className);
 				var.annotate(Valid.class);
+*/
+				if (!(elementType.isComplexType() && !isNotNull)) {
+					//If element ic ComlexType and is not required, do not add @Valid
+					log("@Valid: " + propertyName + " added to class " + className);
+					var.annotate(Valid.class);
+				}
 			}
 		}
 	}
@@ -461,7 +473,7 @@ public class JaxbValidationsPlugins extends Plugin {
 //			}
 //		}
 
-		validAnnotation(type, var, propertyName, className);
+		validAnnotation(type, var, propertyName, className, false);
 		processType(type, var, propertyName, className);
 	}
 
@@ -485,7 +497,7 @@ public class JaxbValidationsPlugins extends Plugin {
 			}
 		}
 
-		validAnnotation(type, var, propertyName, className);
+		validAnnotation(type, var, propertyName, className, false);
 		processType(type, var, propertyName, className);
 	}
 
